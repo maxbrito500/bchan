@@ -47,6 +47,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.interactor.GetChapter
 import tachiyomi.domain.chapter.interactor.UpdateChapter
 import tachiyomi.domain.chapter.model.ChapterUpdate
+import tachiyomi.domain.chapter.service.ChapterRecognition
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.applyFilter
@@ -177,10 +178,10 @@ class UpdatesScreenModel(
                     update.chapterName,
                     update.scanlator,
                     update.chapterUrl,
-                    // SY -->
-                    update.ogMangaTitle,
-                    // SY <--
-                    update.sourceId,
+                    // SY: UpdatesWithRelations doesn't carry the chapter number, so re-derive it from
+                    // the name (matches how the stored number is parsed for name-numbered chapters).
+                    ChapterRecognition.parseChapterNumber(update.ogMangaTitle, update.chapterName),
+                    /* SY --> */ update.ogMangaTitle, /* SY <-- */
                 )
                 val downloadState = when {
                     activeDownload != null -> activeDownload.status

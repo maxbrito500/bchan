@@ -1025,8 +1025,8 @@ class MangaScreenModel(
                     chapter.name,
                     chapter.scanlator,
                     chapter.url,
+                    chapter.chapterNumber,
                     /* SY --> */ manga.ogTitle, /* <-- SY */
-                    manga.source,
                 )
             }
             val downloadState = when {

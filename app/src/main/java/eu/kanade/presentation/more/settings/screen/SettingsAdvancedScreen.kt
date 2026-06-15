@@ -93,7 +93,6 @@ import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.interactor.GetAllManga
 import tachiyomi.domain.manga.interactor.ResetViewerFlags
-import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.sy.SYMR
 import tachiyomi.presentation.core.components.LabeledCheckbox
@@ -594,38 +593,30 @@ object SettingsAdvancedScreen : SearchableSettings {
                         val mangaList = Injekt.get<GetAllManga>().await()
                         val downloadManager: DownloadManager = Injekt.get()
                         var foldersCleared = 0
-                        Injekt.get<SourceManager>().getOnlineSources().forEach { source ->
-                            val mangaFolders = downloadManager.getMangaFolders(source)
-                            val sourceManga = mangaList
-                                .asSequence()
-                                .filter { it.source == source.id }
-                                .map { it to DiskUtil.buildValidFilename(it.ogTitle) }
-                                .toList()
+                        // SY --> Downloads are stored in a single flat folder per manga (no source
+                        // level), so match each folder to a library manga by its folder name.
+                        // Favorites win when two entries share a folder name.
+                        val mangaByFolder = mangaList
+                            .sortedBy { it.favorite }
+                            .associateBy { DiskUtil.buildValidFilename(it.ogTitle) }
 
-                            mangaFolders.forEach mangaFolder@{ mangaFolder ->
-                                val manga =
-                                    sourceManga.find { (_, folderName) ->
-                                        folderName == mangaFolder.name
-                                    }?.first
-                                if (manga == null) {
-                                    // download is orphaned delete it
-                                    foldersCleared += 1 + (
-                                        mangaFolder.listFiles()
-                                            .orEmpty().size
-                                        )
-                                    mangaFolder.delete()
-                                } else {
-                                    val chapterList = Injekt.get<GetChaptersByMangaId>().await(manga.id)
-                                    foldersCleared += downloadManager.cleanupChapters(
-                                        chapterList,
-                                        manga,
-                                        source,
-                                        removeRead,
-                                        removeNonFavorite,
-                                    )
-                                }
+                        downloadManager.getMangaFolders().forEach mangaFolder@{ mangaFolder ->
+                            val manga = mangaByFolder[mangaFolder.name]
+                            if (manga == null) {
+                                // download is orphaned delete it
+                                foldersCleared += 1 + (mangaFolder.listFiles().orEmpty().size)
+                                mangaFolder.delete()
+                            } else {
+                                val chapterList = Injekt.get<GetChaptersByMangaId>().await(manga.id)
+                                foldersCleared += downloadManager.cleanupChapters(
+                                    chapterList,
+                                    manga,
+                                    removeRead,
+                                    removeNonFavorite,
+                                )
                             }
                         }
+                        // SY <--
                         withUIContext {
                             val cleanupString =
                                 if (foldersCleared == 0) {

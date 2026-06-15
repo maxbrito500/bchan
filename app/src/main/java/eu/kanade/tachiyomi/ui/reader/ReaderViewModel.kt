@@ -210,8 +210,8 @@ class ReaderViewModel @JvmOverloads constructor(
                 chapterName = chapter.name,
                 chapterScanlator = chapter.scanlator,
                 chapterUrl = chapter.url,
+                chapterNumber = chapter.chapterNumber,
                 mangaTitle = chapterManga.ogTitle,
-                sourceId = chapterManga.source,
             )
         }
         // SY <--
@@ -547,8 +547,8 @@ class ReaderViewModel @JvmOverloads constructor(
                 dbChapter.name,
                 dbChapter.scanlator,
                 dbChapter.url,
+                dbChapter.chapter_number.toDouble(),
                 /* SY --> */ manga.ogTitle /* SY <-- */,
-                manga.source,
                 skipCache = true,
             )
             if (isDownloaded) {
@@ -628,10 +628,10 @@ class ReaderViewModel @JvmOverloads constructor(
                 nextChapter.name,
                 nextChapter.scanlator,
                 nextChapter.url,
+                nextChapter.chapter_number.toDouble(),
                 // SY -->
                 manga.ogTitle,
                 // SY <--
-                manga.source,
             )
             if (!isNextChapterDownloaded) return@launchIO
 

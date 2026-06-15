@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.source
 
 import android.content.Context
 import eu.kanade.domain.source.service.SourcePreferences
-import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.online.all.EHentai
@@ -57,8 +56,6 @@ class AndroidSourceManager(
 
     private val _isInitialized = MutableStateFlow(false)
     override val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
-
-    private val downloadManager: DownloadManager by injectLazy()
 
     private val scope = CoroutineScope(Job() + Dispatchers.IO)
 
@@ -222,9 +219,7 @@ class AndroidSourceManager(
             val dbSource = sourceRepository.getStubSource(source.id)
             if (dbSource == source) return@launch
             sourceRepository.upsertStubSource(source.id, source.lang, source.name)
-            if (dbSource != null) {
-                downloadManager.renameSource(dbSource, source)
-            }
+            // SY: downloads are no longer stored per source, so there's no source folder to rename.
         }
     }
 

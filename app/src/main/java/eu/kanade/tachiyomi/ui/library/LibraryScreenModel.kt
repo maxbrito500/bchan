@@ -766,8 +766,8 @@ class LibraryScreenModel(
                                         chapter.name,
                                         chapter.scanlator,
                                         chapter.url,
+                                        chapter.chapterNumber,
                                         mergedManga.ogTitle,
-                                        mergedManga.source,
                                     )
                             }
 
@@ -785,10 +785,10 @@ class LibraryScreenModel(
                                 chapter.name,
                                 chapter.scanlator,
                                 chapter.url,
+                                chapter.chapterNumber,
                                 // SY -->
                                 manga.ogTitle,
                                 // SY <--
-                                manga.source,
                             )
                     }
                     .let { if (amount != null) it.take(amount) else it }
@@ -816,8 +816,8 @@ class LibraryScreenModel(
                                         chapter.name,
                                         chapter.scanlator,
                                         chapter.url,
+                                        chapter.chapterNumber,
                                         mergedManga.ogTitle,
-                                        mergedManga.source,
                                     )
                             }
 
@@ -835,10 +835,10 @@ class LibraryScreenModel(
                                 chapter.name,
                                 chapter.scanlator,
                                 chapter.url,
+                                chapter.chapterNumber,
                                 // SY -->
                                 manga.ogTitle,
                                 // SY <--
-                                manga.source,
                             )
                     }
                 downloadManager.downloadChapters(manga, chapters)

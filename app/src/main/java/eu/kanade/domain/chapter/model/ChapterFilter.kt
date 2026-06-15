@@ -35,8 +35,8 @@ fun List<Chapter>.applyFilters(
                     chapter.name,
                     chapter.scanlator,
                     chapter.url,
+                    chapter.chapterNumber,
                     /* SY --> */ manga.ogTitle /* SY <-- */,
-                    manga.source,
                 )
                 downloaded || isLocalManga
             }

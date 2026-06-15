@@ -75,8 +75,8 @@ fun ChapterListDialog(
                         chapterItem.chapter.name,
                         chapterItem.chapter.scanlator,
                         chapterItem.chapter.url,
+                        chapterItem.chapter.chapterNumber,
                         chapterItem.manga.ogTitle,
-                        chapterItem.manga.source,
                     )
                 }
                 val downloadState = when {
