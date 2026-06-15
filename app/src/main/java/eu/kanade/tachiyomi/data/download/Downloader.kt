@@ -6,9 +6,11 @@ import eu.kanade.domain.chapter.model.toSChapter
 import eu.kanade.domain.manga.model.getComicInfo
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.data.cache.ChapterCache
+import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.library.LibraryUpdateNotifier
 import eu.kanade.tachiyomi.data.notification.NotificationHandler
+import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.source.UnmeteredSource
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
@@ -46,6 +48,7 @@ import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
 import mihon.core.common.archive.ZipWriter
 import nl.adaptivity.xmlutil.serialization.XML
+import okhttp3.Request
 import okhttp3.Response
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.storage.extension
@@ -80,6 +83,9 @@ class Downloader(
     private val cache: DownloadCache,
     private val sourceManager: SourceManager = Injekt.get(),
     private val chapterCache: ChapterCache = Injekt.get(),
+    // SY -->
+    private val coverCache: CoverCache = Injekt.get(),
+    // SY <--
     private val downloadPreferences: DownloadPreferences = Injekt.get(),
     private val xml: XML = Injekt.get(),
     private val getCategories: GetCategories = Injekt.get(),
@@ -440,6 +446,11 @@ class Downloader(
 
             DiskUtil.createNoMediaFile(tmpDir, context)
 
+            // SY --> Archive the manga cover next to the downloaded chapters so it
+            // survives even if the online source is broken or the series is deleted.
+            archiveMangaCover(mangaDir, download.manga)
+            // SY <--
+
             download.status = Download.State.DOWNLOADED
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
@@ -449,6 +460,65 @@ class Downloader(
             notifier.onError(error.message, download.chapter.name, download.manga.title, download.manga.id)
         }
     }
+
+    // SY -->
+    /**
+     * Saves the manga cover as [DownloadProvider.COVER_FILE_NAME] in the manga download directory
+     * so it can still be displayed when the online source is unavailable or the series is deleted.
+     *
+     * It never throws: a failure to archive the cover must not fail the chapter download.
+     *
+     * @param mangaDir the manga download directory.
+     * @param manga the manga whose cover should be archived.
+     */
+    private suspend fun archiveMangaCover(mangaDir: UniFile, manga: Manga) {
+        try {
+            // Idempotent: keep the existing archived cover.
+            if (mangaDir.findFile(DownloadProvider.COVER_FILE_NAME)?.exists() == true) return
+
+            // Prefer a cover that is already on disk to avoid an extra network request.
+            val customCover = coverCache.getCustomCoverFile(manga.id).takeIf { it.exists() }
+            val cachedCover = coverCache.getCoverFile(manga.thumbnailUrl)?.takeIf { it.exists() }
+            val coverBytes = (customCover ?: cachedCover)?.readBytes()
+                ?: fetchCoverFromNetwork(manga)
+                ?: return
+
+            val target = mangaDir.createFile(DownloadProvider.COVER_FILE_NAME) ?: return
+            target.openOutputStream().use { output -> output.write(coverBytes) }
+            DiskUtil.createNoMediaFile(mangaDir, context)
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            logcat(LogPriority.WARN, e) { "Failed to archive cover for ${manga.title}" }
+        }
+    }
+
+    /**
+     * Downloads the manga cover from its source once. Also populates the cover cache so the
+     * regular display path benefits. Returns null on any failure.
+     */
+    private suspend fun fetchCoverFromNetwork(manga: Manga): ByteArray? {
+        val thumbnailUrl = manga.thumbnailUrl?.takeIf { it.startsWith("http", ignoreCase = true) } ?: return null
+        val source = sourceManager.get(manga.source) as? HttpSource ?: return null
+        return try {
+            val request = Request.Builder().url(thumbnailUrl).headers(source.headers).build()
+            source.client.newCall(request).awaitSuccess().use { response ->
+                val bytes = response.body.bytes()
+                // Populate the cover cache too so the normal display path can use it immediately.
+                coverCache.getCoverFile(thumbnailUrl)?.let { file ->
+                    runCatching {
+                        file.parentFile?.mkdirs()
+                        file.writeBytes(bytes)
+                    }
+                }
+                bytes
+            }
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            logcat(LogPriority.WARN, e) { "Failed to fetch cover for ${manga.title}" }
+            null
+        }
+    }
+    // SY <--
 
     /**
      * Gets the image from the filesystem if it exists or downloads it otherwise.

@@ -25,16 +25,21 @@ fun Manga.prepUpdateCover(coverCache: CoverCache, remoteManga: SManga, refreshSa
 
     if (!refreshSameUrl && thumbnailUrl == newUrl) return this
 
+    val urlChanged = thumbnailUrl != newUrl
+
     return when {
         isLocal() -> {
             this.copy(coverLastModified = Instant.now().toEpochMilli())
         }
         hasCustomCover(coverCache) -> {
-            coverCache.deleteFromCache(this, false)
+            // Only drop the cached source cover when the url actually changed; on a same-url
+            // refresh keep it so it survives a failed refetch (the bumped coverLastModified
+            // marks it stale and forces a refetch instead).
+            if (urlChanged) coverCache.deleteFromCache(this, false)
             this
         }
         else -> {
-            coverCache.deleteFromCache(this, false)
+            if (urlChanged) coverCache.deleteFromCache(this, false)
             this.copy(coverLastModified = Instant.now().toEpochMilli())
         }
     }

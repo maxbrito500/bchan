@@ -93,6 +93,20 @@ class DownloadProvider(
         return sourceDir?.findFile(getMangaDirName(mangaTitle))
     }
 
+    // SY -->
+    /**
+     * Returns the archived cover file stored in a manga's download directory, if it exists.
+     *
+     * @param mangaTitle the title of the manga to query.
+     * @param source the source of the manga.
+     */
+    fun findMangaCover(mangaTitle: String, source: Source): UniFile? {
+        return findMangaDir(mangaTitle, source)
+            ?.findFile(COVER_FILE_NAME)
+            ?.takeIf { it.exists() }
+    }
+    // SY <--
+
     /**
      * Returns the download directory for a chapter if it exists.
      *
@@ -146,6 +160,9 @@ class DownloadProvider(
     ): List<UniFile> {
         val mangaDir = findMangaDir(/* SY --> */ manga.ogTitle /* SY <-- */, source) ?: return emptyList()
         return mangaDir.listFiles().orEmpty().asList().filter {
+            // Never treat the archived cover or the .nomedia marker as an unmatched
+            // chapter, otherwise the cleanup job would delete them.
+            if (it.name == COVER_FILE_NAME || it.name == DiskUtil.NOMEDIA_FILE) return@filter false
             chapters.find { chp ->
                 getValidChapterDirNames(chp.name, chp.scanlator, chp.url).any { dir ->
                     mangaDir.findFile(dir) != null
@@ -294,4 +311,14 @@ class DownloadProvider(
             }
         }
     }
+
+    // SY -->
+    companion object {
+        /**
+         * Name of the cover archived alongside a manga's downloaded chapters.
+         * Matches the local source convention (LocalCoverManager).
+         */
+        const val COVER_FILE_NAME = "cover.jpg"
+    }
+    // SY <--
 }

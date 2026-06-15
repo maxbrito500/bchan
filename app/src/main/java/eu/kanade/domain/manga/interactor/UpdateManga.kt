@@ -50,18 +50,22 @@ class UpdateManga(
                 null
             }
 
+        val urlChanged = localManga.thumbnailUrl != remoteManga.thumbnail_url
         val coverLastModified =
             when {
                 // Never refresh covers if the url is empty to avoid "losing" existing covers
                 remoteManga.thumbnail_url.isNullOrEmpty() -> null
-                !manualFetch && localManga.thumbnailUrl == remoteManga.thumbnail_url -> null
+                !manualFetch && !urlChanged -> null
                 localManga.isLocal() -> Instant.now().toEpochMilli()
                 localManga.hasCustomCover(coverCache) -> {
-                    coverCache.deleteFromCache(localManga, false)
+                    // Only drop the cached source cover when the url actually changed; on a
+                    // same-url refresh keep it so it survives a failed refetch (the bumped
+                    // coverLastModified marks it stale and forces a refetch instead).
+                    if (urlChanged) coverCache.deleteFromCache(localManga, false)
                     null
                 }
                 else -> {
-                    coverCache.deleteFromCache(localManga, false)
+                    if (urlChanged) coverCache.deleteFromCache(localManga, false)
                     Instant.now().toEpochMilli()
                 }
             }

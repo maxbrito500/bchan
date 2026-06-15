@@ -14,6 +14,7 @@ import coil3.request.Options
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.coil.MangaCoverFetcher.Companion.USE_CUSTOM_COVER_KEY
+import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.network.await
 import eu.kanade.tachiyomi.source.online.HttpSource
 import logcat.LogPriority
@@ -28,6 +29,7 @@ import okio.buffer
 import okio.sink
 import okio.source
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.model.MangaCover
 import tachiyomi.domain.source.service.SourceManager
@@ -55,6 +57,10 @@ class MangaCoverFetcher(
     private val sourceLazy: Lazy<HttpSource?>,
     private val callFactoryLazy: Lazy<Call.Factory>,
     private val imageLoader: ImageLoader,
+    // SY -->
+    private val coverLastModified: Long,
+    private val archivedCoverProvider: suspend () -> UniFile?,
+    // SY <--
 ) : Fetcher {
 
     private val diskCacheKey: String
@@ -111,7 +117,19 @@ class MangaCoverFetcher(
         } else {
             null
         }
-        if (libraryCoverCacheFile?.exists() == true && options.diskCachePolicy.readEnabled) {
+        // SY --> Treat the cached cover as stale when it clearly predates the manga's
+        // coverLastModified (e.g. a refresh was requested). When stale we fall through to refetch,
+        // but still keep the file on disk so loadFromFallback can use it if the network fails.
+        // The tolerance absorbs filesystem mtime truncation (external storage can round to ~1-2s),
+        // so a freshly fetched cover is never mistaken for stale and refetched on every display.
+        val coverCacheStale = libraryCoverCacheFile != null &&
+            coverLastModified > libraryCoverCacheFile.lastModified() + COVER_STALE_TOLERANCE_MS
+        // SY <--
+        if (libraryCoverCacheFile?.exists() == true && options.diskCachePolicy.readEnabled &&
+            // SY -->
+            !coverCacheStale
+            // SY <--
+        ) {
             return fileLoader(libraryCoverCacheFile)
         }
 
@@ -165,9 +183,42 @@ class MangaCoverFetcher(
             }
         } catch (e: Exception) {
             snapshot?.close()
+            // SY --> When the network is unavailable or the source is broken/deleted, fall back to
+            // any cover we already have on disk instead of showing nothing.
+            if (e is IOException && options.diskCachePolicy.readEnabled) {
+                loadFromFallback(libraryCoverCacheFile)?.let { return it }
+            }
+            // SY <--
             throw e
         }
     }
+
+    // SY -->
+    /**
+     * Returns the best locally-available cover, or null if none exists. Used as a fallback when the
+     * network request fails so library covers don't disappear when the source is unavailable.
+     */
+    private suspend fun loadFromFallback(libraryCoverCacheFile: File?): FetchResult? {
+        // 1. Stale-but-present cover cache file
+        if (libraryCoverCacheFile?.exists() == true) {
+            return fileLoader(libraryCoverCacheFile)
+        }
+        // 2. Coil disk-cache snapshot
+        readFromDiskCache()?.let { snapshot ->
+            return SourceFetchResult(
+                source = snapshot.toImageSource(),
+                mimeType = "image/*",
+                dataSource = DataSource.DISK,
+            )
+        }
+        // 3. Cover archived in the manga's download folder
+        val archivedCover = archivedCoverProvider()
+        if (archivedCover?.exists() == true) {
+            return fileUriLoader(archivedCover.uri.toString())
+        }
+        return null
+    }
+    // SY <--
 
     private suspend fun executeNetworkRequest(): Response {
         val client = sourceLazy.value?.client ?: callFactoryLazy.value
@@ -304,6 +355,10 @@ class MangaCoverFetcher(
         private val coverCache: CoverCache by injectLazy()
         private val sourceManager: SourceManager by injectLazy()
 
+        // SY -->
+        private val downloadProvider: DownloadProvider by injectLazy()
+        // SY <--
+
         override fun create(data: Manga, options: Options, imageLoader: ImageLoader): Fetcher {
             return MangaCoverFetcher(
                 url = data.thumbnailUrl,
@@ -315,6 +370,16 @@ class MangaCoverFetcher(
                 sourceLazy = lazy { sourceManager.get(data.source) as? HttpSource },
                 callFactoryLazy = callFactoryLazy,
                 imageLoader = imageLoader,
+                // SY -->
+                coverLastModified = data.coverLastModified,
+                archivedCoverProvider = {
+                    if (!data.favorite) {
+                        null
+                    } else {
+                        downloadProvider.findMangaCover(data.ogTitle, sourceManager.getOrStub(data.source))
+                    }
+                },
+                // SY <--
             )
         }
     }
@@ -325,6 +390,11 @@ class MangaCoverFetcher(
 
         private val coverCache: CoverCache by injectLazy()
         private val sourceManager: SourceManager by injectLazy()
+
+        // SY -->
+        private val downloadProvider: DownloadProvider by injectLazy()
+        private val getManga: GetManga by injectLazy()
+        // SY <--
 
         override fun create(data: MangaCover, options: Options, imageLoader: ImageLoader): Fetcher {
             return MangaCoverFetcher(
@@ -337,6 +407,19 @@ class MangaCoverFetcher(
                 sourceLazy = lazy { sourceManager.get(data.sourceId) as? HttpSource },
                 callFactoryLazy = callFactoryLazy,
                 imageLoader = imageLoader,
+                // SY -->
+                coverLastModified = data.lastModified,
+                archivedCoverProvider = {
+                    if (!data.isMangaFavorite) {
+                        null
+                    } else {
+                        val manga = getManga.await(data.mangaId)
+                        manga?.let {
+                            downloadProvider.findMangaCover(it.ogTitle, sourceManager.getOrStub(it.source))
+                        }
+                    }
+                },
+                // SY <--
             )
         }
     }
@@ -348,5 +431,9 @@ class MangaCoverFetcher(
         private val CACHE_CONTROL_NO_NETWORK_NO_CACHE = CacheControl.Builder().noCache().onlyIfCached().build()
 
         private const val HTTP_NOT_MODIFIED = 304
+
+        // SY --> Margin (ms) to absorb filesystem mtime truncation when deciding cover staleness.
+        private const val COVER_STALE_TOLERANCE_MS = 5_000L
+        // SY <--
     }
 }
