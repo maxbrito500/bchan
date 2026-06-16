@@ -151,6 +151,12 @@ class Downloader(
 
         launchDownloaderJob()
 
+        // SY --> Sweep leftover temp folders from previously failed/aborted downloads so the
+        // download directory stays clean. Safe here: the chapters about to download are already
+        // in the QUEUE state and are excluded from the sweep.
+        cleanupOrphanedTempDirs()
+        // SY <--
+
         return pending.isNotEmpty()
     }
 
@@ -278,6 +284,51 @@ class Downloader(
         downloaderJob?.cancel()
         downloaderJob = null
     }
+
+    // SY -->
+    /**
+     * Deletes leftover `_tmp` chapter folders that no longer correspond to an active download.
+     *
+     * A failed or force-killed download can leave an empty/partial `<chapter>_tmp` folder behind;
+     * over many chapters (e.g. a broken source) these pile up in the flat download directory.
+     * Folders belonging to a download still pending or in progress are preserved so an active or
+     * paused download is never disturbed. Runs off the main thread and never throws.
+     */
+    private fun cleanupOrphanedTempDirs() {
+        scope.launchIO {
+            try {
+                // (mangaDirName, tmpDirName) pairs that belong to a still-pending/active download.
+                val activeTempDirs = queueState.value
+                    .filter { it.status.value <= Download.State.DOWNLOADING.value }
+                    .map { download ->
+                        provider.getMangaDirName(download.manga.ogTitle) to (
+                            provider.getChapterDirName(
+                                download.chapter.name,
+                                download.chapter.scanlator,
+                                download.chapter.url,
+                                download.chapter.chapterNumber,
+                            ) + TMP_DIR_SUFFIX
+                            )
+                    }
+                    .toSet()
+
+                provider.findDownloadsRoot()?.listFiles().orEmpty().forEach mangaDir@{ mangaDir ->
+                    if (!mangaDir.isDirectory) return@mangaDir
+                    val mangaDirName = mangaDir.name ?: return@mangaDir
+                    mangaDir.listFiles().orEmpty().forEach tempDir@{ entry ->
+                        val name = entry.name ?: return@tempDir
+                        if (!entry.isDirectory || !name.endsWith(TMP_DIR_SUFFIX)) return@tempDir
+                        if ((mangaDirName to name) in activeTempDirs) return@tempDir
+                        entry.delete()
+                    }
+                }
+            } catch (e: Throwable) {
+                if (e is CancellationException) throw e
+                logcat(LogPriority.ERROR, e) { "Failed to clean up orphaned temp download folders" }
+            }
+        }
+    }
+    // SY <--
 
     /**
      * Creates a download object for every chapter and adds them to the downloads queue.
@@ -427,6 +478,9 @@ class Downloader(
 
             if (!isDownloadSuccessful(download, tmpDir)) {
                 download.status = Download.State.ERROR
+                // SY --> Don't leave an empty/partial temp folder behind on failure.
+                tmpDir.delete()
+                // SY <--
                 return
             }
 
@@ -458,6 +512,10 @@ class Downloader(
             // If the page list threw, it will resume here
             logcat(LogPriority.ERROR, error)
             download.status = Download.State.ERROR
+            // SY --> A failed download (e.g. a broken source returning no pages) must not
+            // leave its temp folder behind cluttering the flat download directory.
+            tmpDir.delete()
+            // SY <--
             notifier.onError(error.message, download.chapter.name, download.manga.title, download.manga.id)
         }
     }
