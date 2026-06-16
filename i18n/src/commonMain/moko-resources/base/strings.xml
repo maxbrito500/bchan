@@ -335,6 +335,7 @@
     <string name="ext_installing">Installing</string>
     <string name="ext_installed">Installed</string>
     <string name="ext_trust">Trust</string>
+    <string name="ext_trust_all">Trust all extensions</string>
     <string name="ext_untrusted">Untrusted</string>
     <string name="ext_uninstall">Uninstall</string>
     <string name="ext_remove">Remove</string>

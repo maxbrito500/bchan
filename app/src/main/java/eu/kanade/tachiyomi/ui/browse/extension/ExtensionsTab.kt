@@ -35,11 +35,15 @@ fun extensionsTab(
     val state by extensionsScreenModel.state.collectAsState()
     var privateExtensionToUninstall by remember { mutableStateOf<Extension?>(null) }
 
+    val hasUntrusted = state.items.values.any { items ->
+        items.any { it.extension is Extension.Untrusted }
+    }
+
     return TabContent(
         titleRes = MR.strings.label_extensions,
         badgeNumber = state.updates.takeIf { it > 0 },
         searchEnabled = true,
-        actions = persistentListOf(
+        actions = persistentListOf<AppBar.AppBarAction>(
             AppBar.OverflowAction(
                 title = stringResource(MR.strings.action_filter),
                 onClick = { navigator.push(ExtensionFilterScreen()) },
@@ -48,7 +52,19 @@ fun extensionsTab(
                 title = stringResource(MR.strings.label_extension_repos),
                 onClick = { navigator.push(ExtensionReposScreen()) },
             ),
-        ),
+        ).let { actions ->
+            if (hasUntrusted) {
+                actions.add(
+                    0,
+                    AppBar.OverflowAction(
+                        title = stringResource(MR.strings.ext_trust_all),
+                        onClick = { extensionsScreenModel.trustAllExtensions() },
+                    ),
+                )
+            } else {
+                actions
+            }
+        },
         content = { contentPadding, _ ->
             BackHandler(enabled = state.searchQuery != null) {
                 extensionsScreenModel.search(null)
