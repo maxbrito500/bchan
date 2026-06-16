@@ -743,6 +743,7 @@ class LibraryScreenModel(
             DownloadAction.NEXT_25_CHAPTERS -> downloadNextChapters(25)
             DownloadAction.UNREAD_CHAPTERS -> downloadNextChapters(null)
             DownloadAction.BOOKMARKED_CHAPTERS -> downloadBookmarkedChapters()
+            DownloadAction.ALL_CHAPTERS -> downloadAllChapters()
         }
         clearSelection()
     }
@@ -829,6 +830,54 @@ class LibraryScreenModel(
                 // SY <--
 
                 val chapters = getBookmarkedChaptersByMangaId.await(manga.id)
+                    .fastFilterNot { chapter ->
+                        downloadManager.getQueuedDownloadOrNull(chapter.id) != null ||
+                            downloadManager.isChapterDownloaded(
+                                chapter.name,
+                                chapter.scanlator,
+                                chapter.url,
+                                // SY -->
+                                manga.ogTitle,
+                                // SY <--
+                                manga.source,
+                            )
+                    }
+                downloadManager.downloadChapters(manga, chapters)
+            }
+        }
+    }
+
+    private fun downloadAllChapters() {
+        val mangas = state.value.selectedManga
+        screenModelScope.launchNonCancellable {
+            mangas.forEach { manga ->
+                // SY -->
+                if (manga.source == MERGED_SOURCE_ID) {
+                    val mergedMangas = getMergedMangaById.await(manga.id)
+                        .associateBy { it.id }
+                    getMergedChaptersByMangaId.await(manga.id, applyScanlatorFilter = true)
+                        .groupBy { it.mangaId }
+                        .forEach ab@{ (mangaId, chapters) ->
+                            val mergedManga = mergedMangas[mangaId] ?: return@ab
+                            val downloadChapters = chapters.fastFilterNot { chapter ->
+                                downloadManager.queueState.value.fastAny { chapter.id == it.chapter.id } ||
+                                    downloadManager.isChapterDownloaded(
+                                        chapter.name,
+                                        chapter.scanlator,
+                                        chapter.url,
+                                        mergedManga.ogTitle,
+                                        mergedManga.source,
+                                    )
+                            }
+
+                            downloadManager.downloadChapters(mergedManga, downloadChapters)
+                        }
+
+                    return@forEach
+                }
+                // SY <--
+
+                val chapters = getChaptersByMangaId.await(manga.id, applyScanlatorFilter = true)
                     .fastFilterNot { chapter ->
                         downloadManager.getQueuedDownloadOrNull(chapter.id) != null ||
                             downloadManager.isChapterDownloaded(
