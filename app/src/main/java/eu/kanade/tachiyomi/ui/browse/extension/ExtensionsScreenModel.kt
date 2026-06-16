@@ -208,6 +208,12 @@ class ExtensionsScreenModel(
         }
     }
 
+    fun trustAllExtensions() {
+        screenModelScope.launch {
+            extensionManager.untrustedExtensionsFlow.value.forEach { extensionManager.trust(it) }
+        }
+    }
+
     @Immutable
     data class State(
         val isLoading: Boolean = true,
