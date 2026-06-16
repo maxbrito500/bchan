@@ -376,7 +376,7 @@ class MangaCoverFetcher(
                     if (!data.favorite) {
                         null
                     } else {
-                        downloadProvider.findMangaCover(data.ogTitle, sourceManager.getOrStub(data.source))
+                        downloadProvider.findMangaCover(data.ogTitle)
                     }
                 },
                 // SY <--
@@ -415,7 +415,7 @@ class MangaCoverFetcher(
                     } else {
                         val manga = getManga.await(data.mangaId)
                         manga?.let {
-                            downloadProvider.findMangaCover(it.ogTitle, sourceManager.getOrStub(it.source))
+                            downloadProvider.findMangaCover(it.ogTitle)
                         }
                     }
                 },

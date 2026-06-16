@@ -86,10 +86,9 @@ class DownloadProvider(
      * Returns the archived cover file stored in a manga's download directory, if it exists.
      *
      * @param mangaTitle the title of the manga to query.
-     * @param source the source of the manga.
      */
-    fun findMangaCover(mangaTitle: String, source: Source): UniFile? {
-        return findMangaDir(mangaTitle, source)
+    fun findMangaCover(mangaTitle: String): UniFile? {
+        return findMangaDir(mangaTitle)
             ?.findFile(COVER_FILE_NAME)
             ?.takeIf { it.exists() }
     }
