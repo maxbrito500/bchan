@@ -37,8 +37,8 @@ internal class DownloadPageLoader(
             dbChapter.name,
             dbChapter.scanlator,
             dbChapter.url,
+            dbChapter.chapter_number.toDouble(),
             /* SY --> */ manga.ogTitle, /* <-- SY */
-            source,
         )
         return if (chapterPath?.isFile == true) {
             getPagesFromArchive(chapterPath)

@@ -95,8 +95,8 @@ class ChapterLoader(
             dbChapter.name,
             dbChapter.scanlator,
             dbChapter.url,
+            dbChapter.chapter_number.toDouble(),
             /* SY --> */ manga.ogTitle, /* SY <-- */
-            manga.source,
             skipCache = true,
         )
         return when {
@@ -112,8 +112,8 @@ class ChapterLoader(
                     chapterName = chapter.chapter.name,
                     chapterScanlator = chapter.chapter.scanlator,
                     chapterUrl = chapter.chapter.url,
+                    chapterNumber = chapter.chapter.chapter_number.toDouble(),
                     mangaTitle = manga.ogTitle,
-                    sourceId = manga.source,
                     skipCache = true,
                 )
                 when {

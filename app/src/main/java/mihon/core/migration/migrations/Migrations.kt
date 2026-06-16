@@ -48,4 +48,7 @@ val migrations: List<Migration>
         CategoryPreferencesCleanupMigration(),
         RemoveDuplicateReaderPreferenceMigration(),
         InstallationIdMigration(),
+        // SY -->
+        FlattenDownloadsMigration(),
+        // SY <--
     )

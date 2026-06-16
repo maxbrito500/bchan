@@ -38,8 +38,8 @@ class ReaderTransitionView @JvmOverloads constructor(context: Context, attrs: At
                             chapterName = goingToChapter.name,
                             chapterScanlator = goingToChapter.scanlator,
                             chapterUrl = goingToChapter.url,
+                            chapterNumber = goingToChapter.chapter_number.toDouble(),
                             mangaTitle = /* SY --> */ manga.ogTitle, /* SY <-- */
-                            sourceId = manga.source,
                             skipCache = true,
                         )
                     } ?: false,

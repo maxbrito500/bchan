@@ -120,8 +120,8 @@ class SyncChaptersWithSource(
                             dbChapter.name,
                             dbChapter.scanlator,
                             dbChapter.url,
+                            dbChapter.chapterNumber,
                             /* SY --> */ manga.ogTitle /* SY <-- */,
-                            manga.source,
                         )
 
                     if (shouldRenameChapter) {

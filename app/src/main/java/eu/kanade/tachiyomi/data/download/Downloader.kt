@@ -298,8 +298,8 @@ class Downloader(
                     it.name,
                     it.scanlator,
                     it.url,
+                    it.chapterNumber,
                     /* SY --> */ manga.ogTitle, /* SY <-- */
-                    source,
                 ) == null
             }
             // Add chapters to queue from the start.
@@ -346,7 +346,7 @@ class Downloader(
      */
     private suspend fun downloadChapter(download: Download) {
         val mangaDir =
-            provider.getMangaDir(/* SY --> */ download.manga.ogTitle /* SY <-- */, download.source).getOrElse { e ->
+            provider.getMangaDir(/* SY --> */ download.manga.ogTitle /* SY <-- */).getOrElse { e ->
                 download.status = Download.State.ERROR
                 notifier.onError(e.message, download.chapter.name, download.manga.title, download.manga.id)
                 return
@@ -368,6 +368,7 @@ class Downloader(
             download.chapter.name,
             download.chapter.scanlator,
             download.chapter.url,
+            download.chapter.chapterNumber,
         )
         val tmpDir = mangaDir.createDirectory(chapterDirname + TMP_DIR_SUFFIX)!!
 

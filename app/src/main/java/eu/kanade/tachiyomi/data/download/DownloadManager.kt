@@ -5,7 +5,6 @@ import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.Page
-import eu.kanade.tachiyomi.util.storage.DiskUtil
 import exh.log.xLogE
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -168,8 +167,8 @@ class DownloadManager(
             chapter.name,
             chapter.scanlator,
             chapter.url,
-            /* SY --> */ manga.ogTitle /* SY <-- */,
-            source,
+            chapter.chapterNumber,
+            /* SY --> */ manga.ogTitle, /* SY <-- */
         )
         val files = chapterDir?.listFiles().orEmpty()
             .filter { it.isFile && ImageUtil.isImage(it.name) { it.openInputStream() } }
@@ -189,19 +188,20 @@ class DownloadManager(
      *
      * @param chapterName the name of the chapter to query.
      * @param chapterScanlator scanlator of the chapter to query
+     * @param chapterUrl the url of the chapter to query.
+     * @param chapterNumber the recognized number of the chapter to query.
      * @param mangaTitle the title of the manga to query.
-     * @param sourceId the id of the source of the chapter.
      * @param skipCache whether to skip the directory cache and check in the filesystem.
      */
     fun isChapterDownloaded(
         chapterName: String,
         chapterScanlator: String?,
         chapterUrl: String,
+        chapterNumber: Double,
         mangaTitle: String,
-        sourceId: Long,
         skipCache: Boolean = false,
     ): Boolean {
-        return cache.isChapterDownloaded(chapterName, chapterScanlator, chapterUrl, mangaTitle, sourceId, skipCache)
+        return cache.isChapterDownloaded(chapterName, chapterScanlator, chapterUrl, chapterNumber, mangaTitle, skipCache)
     }
 
     /**
@@ -240,7 +240,7 @@ class DownloadManager(
 
             removeFromDownloadQueue(filteredChapters)
 
-            val (mangaDir, chapterDirs) = provider.findChapterDirs(filteredChapters, manga, source)
+            val (mangaDir, chapterDirs) = provider.findChapterDirs(filteredChapters, manga)
             chapterDirs.forEach { it.delete() }
             cache.removeChapters(filteredChapters, manga)
 
@@ -263,15 +263,8 @@ class DownloadManager(
             if (removeQueued) {
                 downloader.removeFromQueue(manga)
             }
-            provider.findMangaDir(/* SY --> */ manga.ogTitle /* SY <-- */, source)?.delete()
+            provider.findMangaDir(/* SY --> */ manga.ogTitle /* SY <-- */)?.delete()
             cache.removeManga(manga)
-
-            // Delete source directory if empty
-            val sourceDir = provider.findSourceDir(source)
-            if (sourceDir?.listFiles()?.isEmpty() == true) {
-                sourceDir.delete()
-                cache.removeSource(source)
-            }
         }
     }
 
@@ -295,10 +288,10 @@ class DownloadManager(
     // SY -->
 
     /**
-     * return the list of all manga folders
+     * return the list of all manga folders in the flat downloads root
      */
-    fun getMangaFolders(source: Source): List<UniFile> {
-        return provider.findSourceDir(source)?.listFiles()?.toList().orEmpty()
+    fun getMangaFolders(): List<UniFile> {
+        return provider.findDownloadsRoot()?.listFiles()?.toList().orEmpty()
     }
 
     /**
@@ -306,19 +299,17 @@ class DownloadManager(
      *
      * @param allChapters the list of chapters to delete.
      * @param manga the manga of the chapters.
-     * @param source the source of the chapters.
      */
     suspend fun cleanupChapters(
         allChapters: List<Chapter>,
         manga: Manga,
-        source: Source,
         removeRead: Boolean,
         removeNonFavorite: Boolean,
     ): Int {
         var cleaned = 0
 
         if (removeNonFavorite && !manga.favorite) {
-            val mangaFolder = provider.getMangaDir(/* SY --> */ manga.ogTitle /* SY <-- */, source)
+            val mangaFolder = provider.getMangaDir(/* SY --> */ manga.ogTitle /* SY <-- */)
                 .getOrNull()
             if (mangaFolder != null) {
                 cleaned += 1 + mangaFolder.listFiles().orEmpty().size
@@ -328,21 +319,21 @@ class DownloadManager(
             }
         }
 
-        val filesWithNoChapter = provider.findUnmatchedChapterDirs(allChapters, manga, source)
+        val filesWithNoChapter = provider.findUnmatchedChapterDirs(allChapters, manga)
         cleaned += filesWithNoChapter.size
         cache.removeFolders(filesWithNoChapter.mapNotNull { it.name }, manga)
         filesWithNoChapter.forEach { it.delete() }
 
         if (removeRead) {
             val readChapters = allChapters.filter { it.read }
-            val readChapterDirs = provider.findChapterDirs(readChapters, manga, source)
+            val readChapterDirs = provider.findChapterDirs(readChapters, manga)
             readChapterDirs.second.forEach { it.delete() }
             cleaned += readChapterDirs.second.size
             cache.removeChapters(readChapters, manga)
         }
 
         if (cache.getDownloadCount(manga) == 0) {
-            val mangaFolder = provider.getMangaDir(/* SY --> */ manga.ogTitle /* SY <-- */, source).getOrNull()
+            val mangaFolder = provider.getMangaDir(/* SY --> */ manga.ogTitle /* SY <-- */).getOrNull()
             if (mangaFolder != null && !mangaFolder.listFiles().isNullOrEmpty()) {
                 mangaFolder.delete()
                 cache.removeManga(manga)
@@ -376,40 +367,13 @@ class DownloadManager(
     }
 
     /**
-     * Renames source download folder
-     *
-     * @param oldSource the old source.
-     * @param newSource the new source.
-     */
-    fun renameSource(oldSource: Source, newSource: Source) {
-        val oldFolder = provider.findSourceDir(oldSource) ?: return
-        val newName = provider.getSourceDirName(newSource)
-
-        if (oldFolder.name == newName) return
-
-        val capitalizationChanged = oldFolder.name.equals(newName, ignoreCase = true)
-        if (capitalizationChanged) {
-            val tempName = newName + Downloader.TMP_DIR_SUFFIX
-            if (!oldFolder.renameTo(tempName)) {
-                logcat(LogPriority.ERROR) { "Failed to rename source download folder: ${oldFolder.name}" }
-                return
-            }
-        }
-
-        if (!oldFolder.renameTo(newName)) {
-            logcat(LogPriority.ERROR) { "Failed to rename source download folder: ${oldFolder.name}" }
-        }
-    }
-
-    /**
      * Renames manga download folder
      *
      * @param manga the manga
      * @param newTitle the new manga title.
      */
     suspend fun renameManga(manga: Manga, newTitle: String) {
-        val source = sourceManager.getOrStub(manga.source)
-        val oldFolder = provider.findMangaDir(/* SY --> */ manga.ogTitle /* SY <-- */, source) ?: return
+        val oldFolder = provider.findMangaDir(/* SY --> */ manga.ogTitle /* SY <-- */) ?: return
         val newName = provider.getMangaDirName(newTitle)
 
         if (oldFolder.name == newName) return
@@ -442,8 +406,13 @@ class DownloadManager(
      * @param newChapter the target chapter with the new name.
      */
     suspend fun renameChapter(source: Source, manga: Manga, oldChapter: Chapter, newChapter: Chapter) {
-        val oldNames = provider.getValidChapterDirNames(oldChapter.name, oldChapter.scanlator, oldChapter.url)
-        val mangaDir = provider.getMangaDir(/* SY --> */ manga.ogTitle /* SY <-- */, source).getOrElse { e ->
+        val oldNames = provider.getValidChapterDirNames(
+            oldChapter.name,
+            oldChapter.scanlator,
+            oldChapter.url,
+            oldChapter.chapterNumber,
+        )
+        val mangaDir = provider.getMangaDir(/* SY --> */ manga.ogTitle /* SY <-- */).getOrElse { e ->
             logcat(LogPriority.ERROR, e) { "Manga download folder doesn't exist. Skipping renaming after source sync" }
             return
         }
@@ -453,7 +422,12 @@ class DownloadManager(
             .mapNotNull { mangaDir.findFile(it) }
             .firstOrNull() ?: return
 
-        var newName = provider.getChapterDirName(newChapter.name, newChapter.scanlator, newChapter.url)
+        var newName = provider.getChapterDirName(
+            newChapter.name,
+            newChapter.scanlator,
+            newChapter.url,
+            newChapter.chapterNumber,
+        )
         if (oldDownload.isFile && oldDownload.extension == "cbz") {
             newName += ".cbz"
         }
@@ -516,10 +490,4 @@ class DownloadManager(
                     .asFlow(),
             )
         }
-
-    fun renameMangaDir(oldTitle: String, newTitle: String, source: Long) {
-        val sourceDir = provider.findSourceDir(sourceManager.getOrStub(source)) ?: return
-        val mangaDir = sourceDir.findFile(DiskUtil.buildValidFilename(oldTitle)) ?: return
-        mangaDir.renameTo(DiskUtil.buildValidFilename(newTitle))
-    }
 }
