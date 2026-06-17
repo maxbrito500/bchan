@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.util.system.setForegroundSafely
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combineTransform
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -54,49 +55,41 @@ class DownloadJob(context: Context, workerParams: WorkerParameters) : CoroutineW
     }
 
     override suspend fun doWork(): Result {
-        var networkCheck = checkNetworkState(
-            applicationContext.activeNetworkState(),
-            downloadPreferences.downloadOnlyOverWifi.get(),
-        )
-        var active = networkCheck && downloadManager.downloaderStart()
-
-        if (!active) {
-            return Result.failure()
+        // Start downloading right away if the network is usable.
+        if (isNetworkUsable(applicationContext.activeNetworkState(), downloadPreferences.downloadOnlyOverWifi.get())) {
+            downloadManager.downloaderStart()
         }
 
         setForegroundSafely()
 
+        // Keep the downloader in sync with connectivity for the life of this worker:
+        // resume when the network becomes usable, and pause (without tearing down the
+        // queue or this worker) when it doesn't. This lets downloads survive a
+        // Wi-Fi <-> cellular switch or a brief drop and continue automatically, instead of
+        // erroring out and requiring the user to restart the app. The worker ends normally
+        // when the downloader finishes the queue (it cancels this job via DownloadJob.stop).
         coroutineScope {
             combineTransform(
                 applicationContext.networkStateFlow(),
                 downloadPreferences.downloadOnlyOverWifi.changes(),
-                transform = { a, b -> emit(checkNetworkState(a, b)) },
+                transform = { state, requireWifi -> emit(isNetworkUsable(state, requireWifi)) },
             )
-                .onEach { networkCheck = it }
+                .distinctUntilChanged()
+                .onEach { usable ->
+                    if (usable) {
+                        downloadManager.downloaderStart()
+                    } else {
+                        downloadManager.downloaderPause()
+                    }
+                }
                 .launchIn(this)
-        }
-
-        // Keep the worker running when needed
-        while (active) {
-            active = !isStopped && downloadManager.isRunning && networkCheck
         }
 
         return Result.success()
     }
 
-    private fun checkNetworkState(state: NetworkState, requireWifi: Boolean): Boolean {
-        return if (state.isOnline) {
-            val noWifi = requireWifi && !state.isWifi
-            if (noWifi) {
-                downloadManager.downloaderStop(
-                    applicationContext.getString(R.string.download_notifier_text_only_wifi),
-                )
-            }
-            !noWifi
-        } else {
-            downloadManager.downloaderStop(applicationContext.getString(R.string.download_notifier_no_network))
-            false
-        }
+    private fun isNetworkUsable(state: NetworkState, requireWifi: Boolean): Boolean {
+        return state.isOnline && !(requireWifi && !state.isWifi)
     }
 
     companion object {

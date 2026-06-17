@@ -66,6 +66,12 @@ class DownloadManager(
     fun downloaderStart() = downloader.start()
     fun downloaderStop(reason: String? = null) = downloader.stop(reason)
 
+    /**
+     * Pauses the downloader without tearing down the download worker, so it can be resumed
+     * automatically (e.g. when connectivity returns) without restarting the app.
+     */
+    fun downloaderPause() = downloader.pause()
+
     val isDownloaderRunning
         get() = DownloadJob.isRunningFlow(context)
 
