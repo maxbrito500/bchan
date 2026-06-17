@@ -78,7 +78,6 @@ object HomeScreen : Screen() {
     private val TABS = listOf(
         LibraryTab,
         UpdatesTab,
-        HistoryTab,
         BrowseTab,
         MoreTab,
     )

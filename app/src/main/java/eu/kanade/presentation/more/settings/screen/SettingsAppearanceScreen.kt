@@ -213,10 +213,6 @@ object SettingsAppearanceScreen : SearchableSettings {
                     title = stringResource(SYMR.strings.pref_hide_updates_button),
                 ),
                 Preference.PreferenceItem.SwitchPreference(
-                    preference = uiPreferences.showNavHistory,
-                    title = stringResource(SYMR.strings.pref_hide_history_button),
-                ),
-                Preference.PreferenceItem.SwitchPreference(
                     preference = uiPreferences.bottomBarLabels,
                     title = stringResource(SYMR.strings.pref_show_bottom_bar_labels),
                 ),
