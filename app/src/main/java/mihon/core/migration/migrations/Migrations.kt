@@ -50,5 +50,6 @@ val migrations: List<Migration>
         InstallationIdMigration(),
         // SY -->
         FlattenDownloadsMigration(),
+        SeedDefaultExtensionRepoMigration(),
         // SY <--
     )
