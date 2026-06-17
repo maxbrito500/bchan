@@ -221,7 +221,7 @@ abstract class SearchScreenModel(
     data class State(
         val from: Manga? = null,
         val searchQuery: String? = null,
-        val sourceFilter: SourceFilter = SourceFilter.PinnedOnly,
+        val sourceFilter: SourceFilter = SourceFilter.All,
         val onlyShowHasResults: Boolean = false,
         val items: PersistentMap<CatalogueSource, SearchItemResult> = persistentMapOf(),
         val dialog: Dialog? = null,
