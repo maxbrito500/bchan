@@ -92,14 +92,13 @@ fun MoreScreen(
                     )
                 }
             }
-            if (!showNavHistory) {
-                item {
-                    TextPreferenceWidget(
-                        title = stringResource(MR.strings.label_recent_manga),
-                        icon = Icons.Outlined.History,
-                        onPreferenceClick = onClickHistory,
-                    )
-                }
+            // History always lives in the More panel (removed from the bottom navigation bar).
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(MR.strings.label_recent_manga),
+                    icon = Icons.Outlined.History,
+                    onPreferenceClick = onClickHistory,
+                )
             }
             // SY <--
 
