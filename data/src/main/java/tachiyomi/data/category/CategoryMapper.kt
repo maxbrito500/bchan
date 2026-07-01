@@ -11,6 +11,9 @@ object CategoryMapper {
         version: Long,
         uid: Long,
         lastModifiedAt: Long,
+        isFolder: Long,
+        cover: String?,
+        locked: Long,
     ): Category {
         return Category(
             id = id,
@@ -20,6 +23,9 @@ object CategoryMapper {
             version = version,
             uid = uid,
             lastModifiedAt = lastModifiedAt,
+            isFolder = isFolder == 1L,
+            cover = cover,
+            locked = locked == 1L,
         )
     }
 }

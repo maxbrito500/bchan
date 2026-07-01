@@ -47,6 +47,10 @@ class CategoriesRestorer(
                                 uid = if (backupCategory.uid != 0L) backupCategory.uid else dbCategory.uid,
                                 last_modified_at = backupCategory.lastModifiedAt,
                                 isSyncing = 1,
+                                // bchan folders (cover is device-local, left untouched)
+                                isFolder = if (backupCategory.isFolder) 1L else 0L,
+                                cover = null,
+                                locked = if (backupCategory.locked) 1L else 0L,
                                 categoryId = dbCategory.id,
                             )
                         }
@@ -56,12 +60,16 @@ class CategoriesRestorer(
                     val order = nextOrder++
                     handler.awaitOneExecutable {
                         categoriesQueries.insert(
-                            backupCategory.name,
-                            order,
-                            backupCategory.flags,
-                            backupCategory.version,
-                            backupCategory.uid,
-                            backupCategory.lastModifiedAt,
+                            name = backupCategory.name,
+                            order = order,
+                            flags = backupCategory.flags,
+                            version = backupCategory.version,
+                            uid = backupCategory.uid,
+                            last_modified_at = backupCategory.lastModifiedAt,
+                            // bchan folders (cover is device-local, not restored)
+                            isFolder = if (backupCategory.isFolder) 1L else 0L,
+                            cover = null,
+                            locked = if (backupCategory.locked) 1L else 0L,
                         )
                         categoriesQueries.selectLastInsertedRowId()
                     }

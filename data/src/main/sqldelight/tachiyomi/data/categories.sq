@@ -10,7 +10,10 @@ CREATE TABLE categories(
     version INTEGER NOT NULL DEFAULT 0,
     uid INTEGER NOT NULL DEFAULT 0,
     last_modified_at INTEGER NOT NULL DEFAULT 0,
-    is_syncing INTEGER NOT NULL DEFAULT 0
+    is_syncing INTEGER NOT NULL DEFAULT 0,
+    is_folder INTEGER NOT NULL DEFAULT 0,
+    cover TEXT,
+    locked INTEGER NOT NULL DEFAULT 0
 );
 
 -- Insert system category
@@ -46,7 +49,7 @@ BEGIN
 END;
 
 getCategory:
-SELECT _id,name,sort,flags,version,uid,last_modified_at
+SELECT _id,name,sort,flags,version,uid,last_modified_at,is_folder,cover,locked
 FROM categories
 WHERE _id = :id
 LIMIT 1;
@@ -59,8 +62,27 @@ sort AS `order`,
 flags,
 version,
 uid,
-last_modified_at
+last_modified_at,
+is_folder,
+cover,
+locked
 FROM categories
+ORDER BY sort;
+
+getFolders:
+SELECT
+_id AS id,
+name,
+sort AS `order`,
+flags,
+version,
+uid,
+last_modified_at,
+is_folder,
+cover,
+locked
+FROM categories
+WHERE is_folder = 1
 ORDER BY sort;
 
 getCategoriesByMangaId:
@@ -71,15 +93,18 @@ C.sort AS `order`,
 C.flags,
 C.version,
 C.uid,
-C.last_modified_at
+C.last_modified_at,
+C.is_folder,
+C.cover,
+C.locked
 FROM categories C
 JOIN mangas_categories MC
 ON C._id = MC.category_id
 WHERE MC.manga_id = :mangaId;
 
 insert:
-INSERT INTO categories(name, sort, flags, manga_order, version, uid, last_modified_at)
-VALUES (:name, :order, :flags, "", :version, :uid, :last_modified_at);
+INSERT INTO categories(name, sort, flags, manga_order, version, uid, last_modified_at, is_folder, cover, locked)
+VALUES (:name, :order, :flags, "", :version, :uid, :last_modified_at, :isFolder, :cover, :locked);
 
 delete:
 DELETE FROM categories
@@ -93,7 +118,16 @@ SET name = coalesce(:name, name),
     version = coalesce(:version, version),
     uid = coalesce(:uid, uid),
     last_modified_at = coalesce(:last_modified_at, last_modified_at),
-    is_syncing = coalesce(:isSyncing, is_syncing)
+    is_syncing = coalesce(:isSyncing, is_syncing),
+    is_folder = coalesce(:isFolder, is_folder),
+    cover = coalesce(:cover, cover),
+    locked = coalesce(:locked, locked)
+WHERE _id = :categoryId;
+
+-- Set (or clear with NULL) a folder's cover token directly.
+setFolderCover:
+UPDATE categories
+SET cover = :cover
 WHERE _id = :categoryId;
 
 updateAllFlags:

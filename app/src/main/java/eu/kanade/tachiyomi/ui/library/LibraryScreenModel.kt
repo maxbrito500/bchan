@@ -74,6 +74,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.runBlocking
+import logcat.LogPriority
 import mihon.core.common.utils.mutate
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.CheckboxState
@@ -81,9 +82,15 @@ import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.compareToWithCollator
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
+import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.category.interactor.CreateFolder
+import tachiyomi.domain.category.interactor.DeleteCategory
 import tachiyomi.domain.category.interactor.GetCategories
+import tachiyomi.domain.category.interactor.MoveMangaToFolder
 import tachiyomi.domain.category.interactor.SetMangaCategories
+import tachiyomi.domain.category.interactor.UpdateCategory
 import tachiyomi.domain.category.model.Category
+import tachiyomi.domain.category.model.CategoryUpdate
 import tachiyomi.domain.chapter.interactor.GetBookmarkedChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.GetMergedChaptersByMangaId
@@ -105,6 +112,7 @@ import tachiyomi.domain.manga.model.CustomMangaInfo
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.model.MangaUpdate
 import tachiyomi.domain.manga.model.applyFilter
+import tachiyomi.domain.manga.model.asMangaCover
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.track.interactor.GetTracks
 import tachiyomi.domain.track.interactor.GetTracksPerManga
@@ -127,6 +135,12 @@ class LibraryScreenModel(
     private val setReadStatus: SetReadStatus = Injekt.get(),
     private val updateManga: UpdateManga = Injekt.get(),
     private val setMangaCategories: SetMangaCategories = Injekt.get(),
+    // bchan folders -->
+    private val createFolder: CreateFolder = Injekt.get(),
+    private val moveMangaToFolder: MoveMangaToFolder = Injekt.get(),
+    private val updateCategory: UpdateCategory = Injekt.get(),
+    private val deleteCategory: DeleteCategory = Injekt.get(),
+    // bchan folders <--
     private val preferences: BasePreferences = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val coverCache: CoverCache = Injekt.get(),
@@ -439,14 +453,22 @@ class LibraryScreenModel(
         when (groupType) {
             LibraryGroup.BY_DEFAULT -> {
                 // SY <--
+                // bchan folders: a folder is a category with isFolder=true. Its members are "moved"
+                // out of root, so any manga that belongs to a folder is hidden from every tab, and
+                // folders themselves are never rendered as tabs (they show as tiles instead).
+                val folderIds = categories.filterTo(mutableSetOf()) { it.isFolder }.map { it.id }.toSet()
                 val groupCache = mutableMapOf</* Category.id */ Long, MutableList</* LibraryItem */ Long>>()
                 forEach { item ->
+                    val inFolder = folderIds.isNotEmpty() &&
+                        item.libraryManga.categories.any { it in folderIds }
+                    if (inFolder) return@forEach
                     item.libraryManga.categories.forEach { categoryId ->
+                        if (categoryId in folderIds) return@forEach
                         groupCache.getOrPut(categoryId) { mutableListOf() }.add(item.id)
                     }
                 }
 
-                return categories.filter { showSystemCategory || !it.isSystemCategory }
+                return categories.filter { (showSystemCategory || !it.isSystemCategory) && !it.isFolder }
                     .associateWith { groupCache[it.id]?.toList().orEmpty() }
             }
             // SY -->
@@ -1322,6 +1344,89 @@ class LibraryScreenModel(
         libraryPreferences.lastUsedCategory.set(newIndex)
     }
 
+    // bchan folders -->
+    /** Enter a folder (show only its contents). Caller must pass the biometric gate first. */
+    fun enterFolder(folderId: Long) {
+        mutableState.update { it.copy(activeFolderId = folderId) }
+    }
+
+    /** Return to the library root. */
+    fun exitFolder() {
+        mutableState.update { it.copy(activeFolderId = null) }
+    }
+
+    fun createFolder(name: String, locked: Boolean) {
+        screenModelScope.launchIO {
+            createFolder.await(name.trim(), locked)
+        }
+    }
+
+    fun updateFolder(folderId: Long, name: String, locked: Boolean) {
+        screenModelScope.launchIO {
+            updateCategory.await(
+                CategoryUpdate(id = folderId, name = name.trim(), locked = locked),
+            )
+        }
+    }
+
+    fun deleteFolder(folderId: Long) {
+        screenModelScope.launchNonCancellable {
+            // Exit the folder first so we don't render a deleted folder.
+            mutableState.update { if (it.activeFolderId == folderId) it.copy(activeFolderId = null) else it }
+            deleteCategory.await(folderId)
+            coverCache.deleteFolderCover(folderId)
+        }
+    }
+
+    /** Copies the picked image into the folder cover cache and stamps a cache-busting token. */
+    fun setFolderCover(folderId: Long, uri: android.net.Uri) {
+        screenModelScope.launchNonCancellable {
+            try {
+                preferences.context.contentResolver.openInputStream(uri)?.use { input ->
+                    coverCache.setFolderCover(folderId, input)
+                }
+                updateCategory.await(
+                    CategoryUpdate(id = folderId, cover = System.currentTimeMillis().toString()),
+                )
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e)
+            }
+        }
+    }
+
+    /** Move the current selection (or a specific manga list) into a folder, or back to root (null). */
+    fun moveToFolder(folderId: Long?, mangaIds: List<Long> = state.value.selection.toList()) {
+        if (mangaIds.isEmpty()) return
+        screenModelScope.launchNonCancellable {
+            moveMangaToFolder.await(mangaIds, folderId)
+        }
+        clearSelection()
+    }
+
+    /**
+     * Cover to render for a folder tile: the custom cover file if set, otherwise the first member's
+     * cover, otherwise null (placeholder).
+     */
+    fun folderCoverModel(folder: Category): Any? {
+        val file = coverCache.getFolderCoverFile(folder.id)
+        if (folder.cover != null && file.exists()) return file
+        val manga = state.value.getItemsForFolder(folder.id).firstOrNull()?.libraryManga?.manga
+        return manga?.asMangaCover()
+    }
+
+    fun openCreateFolderDialog() {
+        mutableState.update { it.copy(dialog = Dialog.FolderEdit(null)) }
+    }
+
+    fun openEditFolderDialog(folder: Category) {
+        mutableState.update { it.copy(dialog = Dialog.FolderEdit(folder)) }
+    }
+
+    fun openMoveToFolderDialog() {
+        mutableState.update { it.copy(dialog = Dialog.MoveToFolder(state.value.selectedManga)) }
+    }
+    // bchan folders <--
+
     fun openChangeCategoryDialog() {
         screenModelScope.launchIO {
             // Create a copy of selected manga
@@ -1329,7 +1434,8 @@ class LibraryScreenModel(
 
             // Hide the default category because it has a different behavior than the ones from db.
             // SY -->
-            val categories = state.value.libraryData.categories.filter { it.id != 0L }
+            // bchan: also hide folders — folder membership is managed via the "Move to folder" action.
+            val categories = state.value.libraryData.categories.filter { it.id != 0L && !it.isFolder }
             // SY <--
 
             // Get indexes of the common categories to preselect.
@@ -1365,6 +1471,12 @@ class LibraryScreenModel(
         ) : Dialog
 
         data class DeleteManga(val manga: List<Manga>) : Dialog
+
+        // bchan folders -->
+        /** Create (folder == null) or edit an existing folder. */
+        data class FolderEdit(val folder: Category?) : Dialog
+        data class MoveToFolder(val manga: List<Manga>) : Dialog
+        // bchan folders <--
 
         // SY -->
         data object SyncFavoritesWarning : Dialog
@@ -1550,8 +1662,31 @@ class LibraryScreenModel(
         val isSyncEnabled: Boolean = false,
         val groupType: Int = LibraryGroup.BY_DEFAULT,
         // SY <--
+        // bchan folders -->
+        val activeFolderId: Long? = null,
+        // bchan folders <--
     ) {
         val displayedCategories: List<Category> = groupedFavorites.keys.toList()
+
+        // bchan folders -->
+        /** Virtual folders (categories flagged as folders), ordered, shown as tiles at the library root. */
+        val folders: List<Category> = libraryData.categories
+            .filter { it.isFolder }
+            .sortedBy { it.order }
+
+        /** The folder currently being browsed, or null when at the root. */
+        val activeFolder: Category? = activeFolderId?.let { id -> folders.find { it.id == id } }
+
+        /** Items belonging to the given folder (already filtered by search/filters). */
+        fun getItemsForFolder(folderId: Long): List<LibraryItem> {
+            return libraryData.favorites.filter { it.libraryManga.categories.contains(folderId) }
+        }
+
+        /** Whether folder tiles should be shown (root view, default grouping, not searching within). */
+        val showFolders: Boolean = activeFolderId == null &&
+            groupType == LibraryGroup.BY_DEFAULT &&
+            folders.isNotEmpty()
+        // bchan folders <--
 
         val coercedActiveCategoryIndex = activeCategoryIndex.coerceIn(
             minimumValue = 0,

@@ -245,6 +245,9 @@ fun LibraryBottomActionMenu(
     onClickAddToMangaDex: (() -> Unit)?,
     onClickResetInfo: (() -> Unit)?,
     // SY <--
+    // bchan -->
+    onMoveToFolderClicked: (() -> Unit)? = null,
+    // bchan <--
     modifier: Modifier = Modifier,
 ) {
     AnimatedVisibility(
@@ -275,7 +278,10 @@ fun LibraryBottomActionMenu(
                 onClickAddToMangaDex != null ||
                 onClickResetInfo != null ||
                 onClickCollectRecommendations != null ||
-                onMigrateClicked != null
+                onMigrateClicked != null ||
+                // bchan -->
+                onMoveToFolderClicked != null
+            // bchan <--
             val configuration = LocalConfiguration.current
             val moveMarkPrev = remember { !configuration.isTabletUi() }
             var overFlowOpen by remember { mutableStateOf(false) }
@@ -384,6 +390,14 @@ fun LibraryBottomActionMenu(
                                 onClick = onClickResetInfo,
                             )
                         }
+                        // bchan -->
+                        if (onMoveToFolderClicked != null) {
+                            DropdownMenuItem(
+                                text = { Text(text = stringResource(SYMR.strings.action_move_to_folder)) },
+                                onClick = onMoveToFolderClicked,
+                            )
+                        }
+                        // bchan <--
                     }
                 } else {
                     Button(

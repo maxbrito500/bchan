@@ -35,6 +35,14 @@ class CategoryRepositoryImpl(
         }
     }
 
+    override suspend fun getFolders(): List<Category> {
+        return handler.awaitList { categoriesQueries.getFolders(CategoryMapper::mapCategory) }
+    }
+
+    override fun getFoldersAsFlow(): Flow<List<Category>> {
+        return handler.subscribeToList { categoriesQueries.getFolders(CategoryMapper::mapCategory) }
+    }
+
     // SY -->
     override suspend fun insert(category: Category): Long {
         return handler.awaitOneExecutable(true) {
@@ -45,11 +53,20 @@ class CategoryRepositoryImpl(
                 version = category.version,
                 uid = category.uid,
                 last_modified_at = category.lastModifiedAt,
+                isFolder = if (category.isFolder) 1L else 0L,
+                cover = category.cover,
+                locked = if (category.locked) 1L else 0L,
             )
             categoriesQueries.selectLastInsertedRowId()
         }
     }
     // SY <--
+
+    override suspend fun setFolderCover(categoryId: Long, cover: String?) {
+        handler.await {
+            categoriesQueries.setFolderCover(cover = cover, categoryId = categoryId)
+        }
+    }
 
     override suspend fun updatePartial(update: CategoryUpdate) {
         handler.await {
@@ -74,6 +91,9 @@ class CategoryRepositoryImpl(
             uid = update.uid,
             last_modified_at = update.lastModifiedAt,
             isSyncing = null,
+            isFolder = update.isFolder?.let { if (it) 1L else 0L },
+            cover = update.cover,
+            locked = update.locked?.let { if (it) 1L else 0L },
             categoryId = update.id,
         )
     }

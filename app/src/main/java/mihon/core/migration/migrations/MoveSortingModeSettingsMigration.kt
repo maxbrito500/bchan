@@ -44,6 +44,9 @@ class MoveSortingModeSettingsMigration : Migration {
                         last_modified_at = null,
                         isSyncing = null,
                         order = null,
+                        isFolder = null,
+                        cover = null,
+                        locked = null,
                     )
                 }
         }

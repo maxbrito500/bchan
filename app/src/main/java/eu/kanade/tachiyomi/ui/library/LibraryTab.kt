@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.ui.library
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
@@ -13,9 +15,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -31,8 +36,10 @@ import cafe.adriel.voyager.navigator.tab.TabOptions
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.library.DeleteLibraryMangaDialog
 import eu.kanade.presentation.library.LibrarySettingsDialog
+import eu.kanade.presentation.library.components.FolderEditDialog
 import eu.kanade.presentation.library.components.LibraryContent
 import eu.kanade.presentation.library.components.LibraryToolbar
+import eu.kanade.presentation.library.components.MoveToFolderDialog
 import eu.kanade.presentation.library.components.SyncFavoritesConfirmDialog
 import eu.kanade.presentation.library.components.SyncFavoritesProgressDialog
 import eu.kanade.presentation.library.components.SyncFavoritesWarningDialog
@@ -49,6 +56,8 @@ import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.util.system.toast
+import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.authenticate
+import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.isAuthenticationSupported
 import exh.favorites.FavoritesSyncStatus
 import exh.recs.RecommendsScreen
 import exh.recs.batch.RecommendationSearchBottomSheetDialog
@@ -106,6 +115,25 @@ data object LibraryTab : Tab {
         val state by screenModel.state.collectAsState()
 
         val snackbarHostState = remember { SnackbarHostState() }
+
+        // bchan folders: cover picker for the folder currently being edited.
+        var coverTargetFolderId by remember { mutableStateOf<Long?>(null) }
+        val pickFolderCover = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            val id = coverTargetFolderId
+            if (uri != null && id != null) screenModel.setFolderCover(id, uri)
+        }
+        val onFolderTileClick: (Category) -> Unit = { folder ->
+            val activity = context as? FragmentActivity
+            if (folder.locked && activity != null && context.isAuthenticationSupported()) {
+                scope.launch {
+                    if (activity.authenticate(title = folder.name)) {
+                        screenModel.enterFolder(folder.id)
+                    }
+                }
+            } else {
+                screenModel.enterFolder(folder.id)
+            }
+        }
 
         val onClickRefresh: (Category?) -> Boolean = { category ->
             // SY -->
@@ -168,6 +196,9 @@ data object LibraryTab : Tab {
                             context.toast(SYMR.strings.sync_in_progress)
                         }
                     },
+                    // bchan -->
+                    onClickNewFolder = screenModel::openCreateFolderDialog,
+                    // bchan <--
                     // SY -->
                     onClickSyncExh = screenModel::openFavoritesSyncDialog.takeIf { state.showSyncExh },
                     isSyncEnabled = state.isSyncEnabled,
@@ -209,6 +240,9 @@ data object LibraryTab : Tab {
                     onClickAddToMangaDex = screenModel::syncMangaToDex.takeIf { state.showAddToMangadex },
                     onClickResetInfo = screenModel::resetInfo.takeIf { state.showResetInfo },
                     // SY <--
+                    // bchan -->
+                    onMoveToFolderClicked = screenModel::openMoveToFolderDialog,
+                    // bchan <--
                 )
             },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -270,6 +304,18 @@ data object LibraryTab : Tab {
                         getDisplayMode = { screenModel.getDisplayMode() },
                         getColumnsForOrientation = { screenModel.getColumnsForOrientation(it) },
                         getItemsForCategory = { state.getItemsForCategory(it) },
+                        // bchan folders -->
+                        folders = state.folders,
+                        showFolders = state.showFolders,
+                        activeFolder = state.activeFolder,
+                        folderItems = state.activeFolderId?.let { state.getItemsForFolder(it) }.orEmpty(),
+                        getFolderCoverModel = { screenModel.folderCoverModel(it) },
+                        onFolderClick = onFolderTileClick,
+                        onFolderLongClick = { screenModel.openEditFolderDialog(it) },
+                        onExitFolder = screenModel::exitFolder,
+                        onEditFolder = { screenModel.openEditFolderDialog(it) },
+                        onDeleteFolder = { screenModel.deleteFolder(it.id) },
+                        // bchan folders <--
                     )
                 }
             }
@@ -313,6 +359,42 @@ data object LibraryTab : Tab {
                     },
                 )
             }
+            // bchan folders -->
+            is LibraryScreenModel.Dialog.FolderEdit -> {
+                val folder = dialog.folder
+                FolderEditDialog(
+                    folder = folder,
+                    biometricSupported = context.isAuthenticationSupported(),
+                    coverModel = folder?.let { screenModel.folderCoverModel(it) },
+                    onDismissRequest = onDismissRequest,
+                    onPickCover = {
+                        if (folder != null) {
+                            coverTargetFolderId = folder.id
+                            pickFolderCover.launch("image/*")
+                        }
+                    },
+                    onConfirm = { name, locked ->
+                        if (folder == null) {
+                            screenModel.createFolder(name, locked)
+                        } else {
+                            screenModel.updateFolder(folder.id, name, locked)
+                        }
+                        onDismissRequest()
+                    },
+                )
+            }
+
+            is LibraryScreenModel.Dialog.MoveToFolder -> {
+                MoveToFolderDialog(
+                    folders = state.folders,
+                    onDismissRequest = onDismissRequest,
+                    onConfirm = { folderId ->
+                        screenModel.moveToFolder(folderId, dialog.manga.map { it.id })
+                        onDismissRequest()
+                    },
+                )
+            }
+            // bchan folders <--
             // SY -->
             LibraryScreenModel.Dialog.SyncFavoritesWarning -> {
                 SyncFavoritesWarningDialog(
@@ -362,10 +444,12 @@ data object LibraryTab : Tab {
         )
         // SY <--
 
-        BackHandler(enabled = state.selectionMode || state.searchQuery != null) {
+        BackHandler(enabled = state.selectionMode || state.searchQuery != null || state.activeFolderId != null) {
             when {
                 state.selectionMode -> screenModel.clearSelection()
                 state.searchQuery != null -> screenModel.search(null)
+                // bchan folders: exit the folder before leaving the library tab.
+                state.activeFolderId != null -> screenModel.exitFolder()
             }
         }
 

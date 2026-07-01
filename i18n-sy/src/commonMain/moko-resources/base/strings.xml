@@ -744,4 +744,19 @@
 
     <!-- Humanize time -->
     <string name="humanize_fallback">moments ago</string>
+
+    <!-- bchan virtual folders -->
+    <string name="folders">Folders</string>
+    <string name="action_add_folder">New folder</string>
+    <string name="folder_new">New folder</string>
+    <string name="folder_edit">Edit folder</string>
+    <string name="folder_name_hint">Folder name</string>
+    <string name="folder_lock">Lock with biometrics</string>
+    <string name="folder_lock_unsupported">No device biometric or PIN set up</string>
+    <string name="folder_cover_edit">Change cover</string>
+    <string name="action_move_to_folder">Move to folder</string>
+    <string name="remove_from_folder">Remove from folder</string>
+    <string name="move_to_root">None (root)</string>
+    <string name="folder_delete_confirmation">Delete folder \"%1$s\"? The series inside will return to the library root.</string>
+    <string name="folder_locked_toast">Folder is locked</string>
 </resources>

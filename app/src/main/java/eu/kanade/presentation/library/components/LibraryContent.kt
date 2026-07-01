@@ -45,7 +45,50 @@ fun LibraryContent(
     getDisplayMode: (Int) -> PreferenceMutableState<LibraryDisplayMode>,
     getColumnsForOrientation: (Boolean) -> PreferenceMutableState<Int>,
     getItemsForCategory: (Category) -> List<LibraryItem>,
+    // bchan folders -->
+    folders: List<Category>,
+    showFolders: Boolean,
+    activeFolder: Category?,
+    folderItems: List<LibraryItem>,
+    getFolderCoverModel: (Category) -> Any?,
+    onFolderClick: (Category) -> Unit,
+    onFolderLongClick: (Category) -> Unit,
+    onExitFolder: () -> Unit,
+    onEditFolder: (Category) -> Unit,
+    onDeleteFolder: (Category) -> Unit,
+    // bchan folders <--
 ) {
+    // bchan folders: browsing inside a folder replaces the tabs/pager with the folder's contents.
+    if (activeFolder != null) {
+        val isLandscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val columns by remember(isLandscape) { getColumnsForOrientation(isLandscape) }
+        Column(
+            modifier = Modifier.padding(
+                top = contentPadding.calculateTopPadding(),
+                start = contentPadding.calculateStartPadding(LocalLayoutDirection.current),
+                end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
+            ),
+        ) {
+            FolderContent(
+                folder = activeFolder,
+                items = folderItems,
+                columns = columns,
+                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+                selection = selection,
+                onExit = onExitFolder,
+                onEdit = { onEditFolder(activeFolder) },
+                onDelete = { onDeleteFolder(activeFolder) },
+                onClickManga = { manga ->
+                    if (selection.isNotEmpty()) onToggleSelection(activeFolder, manga) else onClickManga(manga.id)
+                },
+                onLongClickManga = { manga -> onToggleRangeSelection(activeFolder, manga) },
+                onClickContinueReading = onContinueReadingClicked,
+            )
+        }
+        return
+    }
+
     Column(
         modifier = Modifier.padding(
             top = contentPadding.calculateTopPadding(),
@@ -53,6 +96,16 @@ fun LibraryContent(
             end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
         ),
     ) {
+        // bchan folders: tile strip at the library root.
+        if (showFolders) {
+            FolderStrip(
+                folders = folders,
+                getCoverModel = getFolderCoverModel,
+                onFolderClick = onFolderClick,
+                onFolderLongClick = onFolderLongClick,
+            )
+        }
+
         val coercedCurrentPage = remember(categories, currentPage) { currentPage.coerceIn(0, categories.lastIndex) }
         // SY <--
         val pagerState = rememberPagerState(coercedCurrentPage) { categories.size }

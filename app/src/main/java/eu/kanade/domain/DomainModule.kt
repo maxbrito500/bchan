@@ -50,7 +50,9 @@ import tachiyomi.data.source.StubSourceRepositoryImpl
 import tachiyomi.data.track.TrackRepositoryImpl
 import tachiyomi.data.updates.UpdatesRepositoryImpl
 import tachiyomi.domain.category.interactor.CreateCategoryWithName
+import tachiyomi.domain.category.interactor.CreateFolder
 import tachiyomi.domain.category.interactor.DeleteCategory
+import tachiyomi.domain.category.interactor.MoveMangaToFolder
 import tachiyomi.domain.category.interactor.GetCategories
 import tachiyomi.domain.category.interactor.RenameCategory
 import tachiyomi.domain.category.interactor.ReorderCategory
@@ -110,6 +112,8 @@ class DomainModule : InjektModule {
         addFactory { SetDisplayMode(get()) }
         addFactory { SetSortModeForCategory(get(), get()) }
         addFactory { CreateCategoryWithName(get(), get()) }
+        addFactory { CreateFolder(get()) }
+        addFactory { MoveMangaToFolder(get(), get()) }
         addFactory { RenameCategory(get()) }
         addFactory { ReorderCategory(get()) }
         addFactory { UpdateCategory(get()) }

@@ -16,6 +16,12 @@ interface CategoryRepository {
 
     fun getCategoriesByMangaIdAsFlow(mangaId: Long): Flow<List<Category>>
 
+    suspend fun getFolders(): List<Category>
+
+    fun getFoldersAsFlow(): Flow<List<Category>>
+
+    suspend fun setFolderCover(categoryId: Long, cover: String?)
+
     // SY -->
     suspend fun insert(category: Category): Long
     // SY <--

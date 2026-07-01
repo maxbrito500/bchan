@@ -39,6 +39,9 @@ fun LibraryToolbar(
     onClickGlobalUpdate: () -> Unit,
     onClickOpenRandomManga: () -> Unit,
     onClickSyncNow: () -> Unit,
+    // bchan -->
+    onClickNewFolder: () -> Unit,
+    // bchan <--
     // SY -->
     onClickSyncExh: (() -> Unit)?,
     isSyncEnabled: Boolean,
@@ -63,6 +66,9 @@ fun LibraryToolbar(
         onClickGlobalUpdate = onClickGlobalUpdate,
         onClickOpenRandomManga = onClickOpenRandomManga,
         onClickSyncNow = onClickSyncNow,
+        // bchan -->
+        onClickNewFolder = onClickNewFolder,
+        // bchan <--
         // SY -->
         onClickSyncExh = onClickSyncExh,
         isSyncEnabled = isSyncEnabled,
@@ -82,6 +88,9 @@ private fun LibraryRegularToolbar(
     onClickGlobalUpdate: () -> Unit,
     onClickOpenRandomManga: () -> Unit,
     onClickSyncNow: () -> Unit,
+    // bchan -->
+    onClickNewFolder: () -> Unit,
+    // bchan <--
     // SY -->
     onClickSyncExh: (() -> Unit)?,
     isSyncEnabled: Boolean,
@@ -131,6 +140,12 @@ private fun LibraryRegularToolbar(
                         title = stringResource(MR.strings.action_open_random_manga),
                         onClick = onClickOpenRandomManga,
                     ),
+                    // bchan -->
+                    AppBar.OverflowAction(
+                        title = stringResource(SYMR.strings.action_add_folder),
+                        onClick = onClickNewFolder,
+                    ),
+                    // bchan <--
                 ).builder().apply {
                     // SY -->
                     if (onClickSyncExh != null) {

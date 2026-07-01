@@ -8,4 +8,7 @@ data class CategoryUpdate(
     val version: Long? = null,
     val uid: Long? = null,
     val lastModifiedAt: Long? = null,
+    val isFolder: Boolean? = null,
+    val cover: String? = null,
+    val locked: Boolean? = null,
 )

@@ -20,6 +20,7 @@ class CoverCache(private val context: Context) {
     companion object {
         private const val COVERS_DIR = "covers"
         private const val CUSTOM_COVERS_DIR = "covers/custom"
+        private const val FOLDER_COVERS_DIR = "covers/folders"
     }
 
     /**
@@ -28,6 +29,8 @@ class CoverCache(private val context: Context) {
     private val cacheDir = getCacheDir(COVERS_DIR)
 
     private val customCoverCacheDir = getCacheDir(CUSTOM_COVERS_DIR)
+
+    private val folderCoverCacheDir = getCacheDir(FOLDER_COVERS_DIR)
 
     /**
      * Returns the cover from cache.
@@ -94,6 +97,41 @@ class CoverCache(private val context: Context) {
      */
     fun deleteCustomCover(mangaId: Long?): Boolean {
         return getCustomCoverFile(mangaId).let {
+            it.exists() && it.delete()
+        }
+    }
+
+    /**
+     * Returns the custom cover file for a virtual folder (category), keyed by its id.
+     *
+     * @param categoryId the folder (category) id.
+     */
+    fun getFolderCoverFile(categoryId: Long): File {
+        return File(folderCoverCacheDir, DiskUtil.hashKeyForDisk(categoryId.toString()))
+    }
+
+    /**
+     * Saves the given stream as a folder's custom cover to cache.
+     *
+     * @param categoryId the folder (category) id.
+     * @param inputStream the stream to copy.
+     * @throws IOException if there's any error.
+     */
+    @Throws(IOException::class)
+    fun setFolderCover(categoryId: Long, inputStream: InputStream) {
+        getFolderCoverFile(categoryId).outputStream().use {
+            inputStream.copyTo(it)
+        }
+    }
+
+    /**
+     * Delete the custom cover of a folder from the cache.
+     *
+     * @param categoryId the folder (category) id.
+     * @return whether the cover was deleted.
+     */
+    fun deleteFolderCover(categoryId: Long): Boolean {
+        return getFolderCoverFile(categoryId).let {
             it.exists() && it.delete()
         }
     }
