@@ -61,6 +61,7 @@ import eu.kanade.presentation.more.settings.widget.TrailingWidgetBuffer
 import eu.kanade.presentation.util.relativeTimeSpanString
 import eu.kanade.tachiyomi.data.backup.create.BackupCreateJob
 import eu.kanade.tachiyomi.data.backup.restore.BackupRestoreJob
+import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.cache.PagePreviewCache
 import eu.kanade.tachiyomi.data.export.LibraryExporter
@@ -137,6 +138,36 @@ object SettingsDataScreen : SearchableSettings {
     ): ManagedActivityResultLauncher<Uri?, Uri?> {
         val context = LocalContext.current
 
+        // bchan: when the picked folder already holds a previous installation's automatic backup,
+        // offer to restore it so the user's library and settings are configured without any manual steps.
+        var detectedBackup by remember { mutableStateOf<Uri?>(null) }
+        if (detectedBackup != null) {
+            AlertDialog(
+                onDismissRequest = { detectedBackup = null },
+                title = { Text(stringResource(SYMR.strings.restore_previous_install_title)) },
+                text = { Text(stringResource(SYMR.strings.restore_previous_install_message)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val backupUri = detectedBackup
+                            detectedBackup = null
+                            if (backupUri != null) {
+                                BackupRestoreJob.start(context, backupUri, RestoreOptions())
+                                context.toast(SYMR.strings.restore_previous_install_started)
+                            }
+                        },
+                    ) {
+                        Text(stringResource(MR.strings.action_restore))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { detectedBackup = null }) {
+                        Text(stringResource(MR.strings.action_cancel))
+                    }
+                },
+            )
+        }
+
         return rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenDocumentTree(),
         ) { uri ->
@@ -158,9 +189,22 @@ object SettingsDataScreen : SearchableSettings {
 
                 UniFile.fromUri(context, uri)?.let {
                     storageDirPref.set(it.uri.toString())
+                    detectedBackup = findLatestBackup(context, it)
                 }
             }
         }
+    }
+
+    /**
+     * bchan: finds the newest automatic backup left by a previous installation under the picked
+     * storage folder (`<base>/autobackup/*.tachibk`), or null when there is none.
+     */
+    private fun findLatestBackup(context: Context, baseDir: UniFile): Uri? {
+        val autoBackupDir = baseDir.findFile("autobackup") ?: return null
+        return autoBackupDir.listFiles()
+            ?.filter { it.isFile && it.name?.endsWith(".tachibk") == true }
+            ?.maxByOrNull { it.name.orEmpty() }
+            ?.uri
     }
 
     @Composable

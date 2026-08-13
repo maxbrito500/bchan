@@ -1,9 +1,11 @@
 package eu.kanade.presentation.library.components
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
@@ -14,6 +16,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalLayoutDirection
 import eu.kanade.core.preference.PreferenceMutableState
 import eu.kanade.tachiyomi.ui.library.LibraryItem
@@ -56,6 +61,7 @@ fun LibraryContent(
     onExitFolder: () -> Unit,
     onEditFolder: (Category) -> Unit,
     onDeleteFolder: (Category) -> Unit,
+    onMoveMangaToFolder: (Long, LibraryManga) -> Unit,
     // bchan folders <--
 ) {
     // bchan folders: browsing inside a folder replaces the tabs/pager with the folder's contents.
@@ -89,6 +95,14 @@ fun LibraryContent(
         return
     }
 
+    // bchan folders: drag-and-drop of series onto folder tiles.
+    val dragState = remember { LibraryDragState() }
+    var containerOrigin by remember { mutableStateOf(Offset.Zero) }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { containerOrigin = it.positionInRoot() },
+    ) {
     Column(
         modifier = Modifier.padding(
             top = contentPadding.calculateTopPadding(),
@@ -103,10 +117,13 @@ fun LibraryContent(
                 getCoverModel = getFolderCoverModel,
                 onFolderClick = onFolderClick,
                 onFolderLongClick = onFolderLongClick,
+                dragState = if (folders.isNotEmpty()) dragState else null,
             )
         }
 
-        val coercedCurrentPage = remember(categories, currentPage) { currentPage.coerceIn(0, categories.lastIndex) }
+        val coercedCurrentPage = remember(categories, currentPage) {
+            currentPage.coerceIn(0, categories.lastIndex.coerceAtLeast(0))
+        }
         // SY <--
         val pagerState = rememberPagerState(coercedCurrentPage) { categories.size }
 
@@ -165,11 +182,15 @@ fun LibraryContent(
                 },
                 onLongClickManga = onToggleRangeSelection,
                 onClickContinueReading = onContinueReadingClicked,
+                dragState = if (folders.isNotEmpty()) dragState else null,
+                onDropOnFolder = onMoveMangaToFolder,
             )
         }
 
         LaunchedEffect(pagerState.currentPage) {
             onChangeCurrentPage(pagerState.currentPage)
         }
+    }
+        DragGhost(state = dragState, containerOrigin = containerOrigin)
     }
 }

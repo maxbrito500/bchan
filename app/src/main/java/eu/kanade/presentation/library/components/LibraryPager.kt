@@ -42,6 +42,8 @@ fun LibraryPager(
     onClickManga: (Category, LibraryManga) -> Unit,
     onLongClickManga: (Category, LibraryManga) -> Unit,
     onClickContinueReading: ((LibraryManga) -> Unit)?,
+    dragState: LibraryDragState? = null,
+    onDropOnFolder: (Long, LibraryManga) -> Unit = { _, _ -> },
 ) {
     HorizontalPager(
         modifier = Modifier.fillMaxSize(),
@@ -89,6 +91,8 @@ fun LibraryPager(
                     onClickContinueReading = onClickContinueReading,
                     searchQuery = searchQuery,
                     onGlobalSearchClicked = onGlobalSearchClicked,
+                    dragState = dragState,
+                    onDropOnFolder = onDropOnFolder,
                 )
             }
             LibraryDisplayMode.CompactGrid, LibraryDisplayMode.CoverOnlyGrid -> {
@@ -103,6 +107,8 @@ fun LibraryPager(
                     onClickContinueReading = onClickContinueReading,
                     searchQuery = searchQuery,
                     onGlobalSearchClicked = onGlobalSearchClicked,
+                    dragState = dragState,
+                    onDropOnFolder = onDropOnFolder,
                 )
             }
             LibraryDisplayMode.ComfortableGrid -> {
@@ -116,6 +122,8 @@ fun LibraryPager(
                     onClickContinueReading = onClickContinueReading,
                     searchQuery = searchQuery,
                     onGlobalSearchClicked = onGlobalSearchClicked,
+                    dragState = dragState,
+                    onDropOnFolder = onDropOnFolder,
                 )
             }
         }

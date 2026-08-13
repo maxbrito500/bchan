@@ -1,5 +1,6 @@
 package eu.kanade.presentation.library.components
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,11 +48,23 @@ fun FolderGridItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    highlighted: Boolean = false,
 ) {
     Column(
         modifier = modifier
             .width(FolderTileWidth)
             .clip(MaterialTheme.shapes.small)
+            .then(
+                if (highlighted) {
+                    Modifier.border(
+                        width = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = MaterialTheme.shapes.small,
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(4.dp),
     ) {
@@ -96,6 +109,7 @@ fun FolderStrip(
     onFolderClick: (Category) -> Unit,
     onFolderLongClick: (Category) -> Unit,
     modifier: Modifier = Modifier,
+    dragState: LibraryDragState? = null,
 ) {
     Column(modifier = modifier.padding(vertical = MaterialTheme.padding.small)) {
         Text(
@@ -113,6 +127,12 @@ fun FolderStrip(
                     coverModel = getCoverModel(folder),
                     onClick = { onFolderClick(folder) },
                     onLongClick = { onFolderLongClick(folder) },
+                    modifier = if (dragState != null) {
+                        Modifier.folderDropTarget(folder.id, dragState)
+                    } else {
+                        Modifier
+                    },
+                    highlighted = dragState?.hoveredFolderId == folder.id,
                 )
             }
         }

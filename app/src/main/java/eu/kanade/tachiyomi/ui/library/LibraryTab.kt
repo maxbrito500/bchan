@@ -252,7 +252,8 @@ data object LibraryTab : Tab {
                     LoadingScreen(Modifier.padding(contentPadding))
                 }
 
-                state.searchQuery.isNullOrEmpty() && !state.hasActiveFilters && state.isLibraryEmpty -> {
+                state.searchQuery.isNullOrEmpty() && !state.hasActiveFilters && state.isLibraryEmpty &&
+                    state.folders.isEmpty() -> {
                     val handler = LocalUriHandler.current
                     EmptyScreen(
                         stringRes = MR.strings.information_empty_library,
@@ -315,6 +316,9 @@ data object LibraryTab : Tab {
                         onExitFolder = screenModel::exitFolder,
                         onEditFolder = { screenModel.openEditFolderDialog(it) },
                         onDeleteFolder = { screenModel.deleteFolder(it.id) },
+                        onMoveMangaToFolder = { folderId, manga ->
+                            screenModel.moveToFolder(folderId, listOf(manga.id))
+                        },
                         // bchan folders <--
                     )
                 }
